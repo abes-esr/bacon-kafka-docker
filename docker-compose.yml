@@ -1,0 +1,255 @@
+version: "3.2"
+services:
+  bacon-kafka-broker:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: bacon-kafka-broker
+    container_name: bacon-kafka-broker
+    restart: unless-stopped
+    ports:
+      - ${BACON_KAFKA_BROKER_PORT}:9094
+      - "9101:9101"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${BACON_KAFKA_INTERNAL_HOSTNAME}:29092,PLAINTEXT_HOST://${BACON_KAFKA_EXTERNAL_HOSTNAME}:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_MAX_TIMEOUT_MS: 1800000
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@${BACON_KAFKA_INTERNAL_HOSTNAME}:29093
+      KAFKA_LISTENERS: PLAINTEXT://${BACON_KAFKA_INTERNAL_HOSTNAME}:29092,CONTROLLER://${BACON_KAFKA_INTERNAL_HOSTNAME}:29093,PLAINTEXT_HOST://0.0.0.0:9094
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      KAFKA_LOG_RETENTION_HOURS: ${BACON_KAFKA_LOG_RETENTION_HOURS}
+      KAFKA_LOG_RETENTION_BYTES: ${BACON_KAFKA_LOG_RETENTION_BYTES}
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: ${BACON_KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS}
+      KAFKA_REST_CONSUMER_REQUEST_TIMEOUT_MS: 30000
+      TZ: ${TZ}
+      CLUSTER_ID: ${BACON_KAFKA_CLUSTER_ID}
+    volumes:
+      - ${BACON_KAFKA_WORKDIR}:/tmp/kraft-combined-logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+
+  bacon-kafka-connect:
+    image: confluentinc/cp-kafka-connect-base:7.5.0
+    hostname: bacon-kafka-connect
+    container_name: bacon-kafka-connect
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-broker
+      - bacon-kafka-schema-registry
+    ports:
+      - ${BACON_KAFKA_CONNECT_PORT}:8083
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: ${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
+      CONNECT_REST_ADVERTISED_HOST_NAME: "bacon-kafka-connect"
+      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      #  ---------------
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/data/connect-jars
+      # If you want to use the Confluent Hub installer to d/l component, but make them available
+      # when running this offline, spin up the stack once and then run :
+      #   docker cp kafka-connect:/usr/share/confluent-hub-components ./data/connect-jars
+      TZ: ${TZ}
+    volumes:
+      - ./kafka-connect:/etc/kafka-connect/jars
+      - ./volumes/kafka-connect:/connectors
+      - /applis/KatTest/bacon/:/applis/KatTest/bacon/
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+    # In the command section, $ are replaced with $$ to avoid the error 'Invalid interpolation format for "command" option'
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing Connector"
+        confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:10.7.4
+        confluent-hub install --no-prompt confluentinc/kafka-connect-elasticsearch:11.1.3
+        confluent-hub install --no-prompt jcustenborder/kafka-connect-spooldir:2.0.65
+        #
+        echo "Launching Kafka Connect worker"
+        /etc/confluent/docker/run &
+        #
+        # Wait for Kafka Connect listener
+        echo "Waiting for Kafka Connect to start listening on localhost ⏳"
+        while : ; do
+          curl_status=$$(curl -s -o /dev/null -w %{http_code} http://localhost:8083/connectors)
+          echo -e $$(date) " Kafka Connect listener HTTP state: " $$curl_status " (waiting for 200)"
+          if [ $$curl_status -eq 200 ] ; then
+            break
+          fi
+          sleep 5 
+        done
+        echo -e "\n--\n+> Creating Data Generator source" 
+        for file in $$(ls /connectors)
+        do
+        echo "Importing $file connector"
+        curl -X PUT -H "Content-Type: application/json" -H "Accept: application/json" -d @/connectors/$$file localhost:8083/connectors/$$file/config
+        done
+        sleep infinity
+
+  bacon-kafka-rest-proxy:
+    image: confluentinc/cp-kafka-rest:7.5.0
+    depends_on:
+      - bacon-kafka-broker
+      - bacon-kafka-schema-registry
+    ports:
+      - ${BACON_KAFKA_REST_PROXY_PORT}:8082
+    hostname: bacon-kafka-rest-proxy
+    container_name: bacon-kafka-rest-proxy
+    restart: unless-stopped
+    environment:
+      KAFKA_REST_HOST_NAME: bacon-kafka-rest-proxy
+      KAFKA_REST_BOOTSTRAP_SERVERS: ${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
+      KAFKA_REST_LISTENERS: "http://0.0.0.0:8082"
+      KAFKA_REST_SCHEMA_REGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
+      KAFKA_REST_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      KAFKA_REST_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
+      KAFKA_REST_CONSUMER_REQUEST_TIMEOUT_MS: 30000
+      TZ: ${TZ}
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+
+  bacon-kafka-schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    hostname: bacon-kafka-schema-registry
+    container_name: bacon-kafka-schema-registry
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-broker
+    ports:
+      - ${BACON_KAFKA_SCHEMA_REGISTRY_PORT}:8081
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: bacon-kafka-schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
+      # MAYBE : À remove
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      SCHEMA_REGISTRY_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
+      TZ: ${TZ}
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+      - ./volumes/kafka-schema-registry:/schemas
+    command:
+      - bash
+      - -c
+      - |
+        echo "Launching Kafka Connect worker"
+        /etc/confluent/docker/run &
+        # Wait for Kafka Schema Registry listener
+        echo "Waiting for Kafka Schema Registry to start listening on localhost ⏳"
+        while : ; do
+          curl_status=$$(curl -s -o /dev/null -w %{http_code} http://localhost:8081/subjects)
+          echo -e $$(date) " Kafka Schema Registry listener HTTP state: " $$curl_status " (waiting for 200)"
+          if [ $$curl_status -eq 200 ] ; then
+            break
+          fi
+          sleep 6
+        done
+        echo -e "\n--\n+> Creating Data Generator source"
+
+        SCR="localhost:8081"
+        curl -X PUT -H "Content-Type: application/json" $$SCR/mode --data '{"mode": "IMPORT"}'
+        # Restore locally stored schemas <> versions <> subject elements
+        for FILE in $$(ls -1 /schemas/*_* | sort -n); do
+        SUB=$$(echo $$FILE | cut -d_ -f2-)
+          curl -X POST http://$$SCR/subjects/$$SUB/versions -H "Content-Type: application/vnd.schemaregistry.v1+json" -d @$$FILE
+        done
+        sleep infinity
+
+  bacon-kafka-control-center:
+    image: confluentinc/cp-enterprise-control-center:7.5.0
+    hostname: bacon-kafka-control-center
+    container_name: bacon-kafka-control-center
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-broker
+      - bacon-kafka-schema-registry
+      - bacon-kafka-connect
+      #- ksqldb-server
+    ports:
+      - ${BACON_KAFKA_CONTROL_CENTER_PORT}:9021
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: ${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
+      CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER: "bacon-kafka-connect:8083"
+      CONTROL_CENTER_CONNECT_HEALTHCHECK_ENDPOINT: "/connectors"
+      #CONTROL_CENTER_KSQL_KSQLDB1_URL: "http://ksqldb-server:8088"
+      #CONTROL_CENTER_KSQL_KSQLDB1_ADVERTISED_URL: "http://localhost:8088"
+      CONTROL_CENTER_SCHEMA_REGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      PORT: 9021
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+
+  bacon-kafka-kafdrop-ui:
+    image: obsidiandynamics/kafdrop:3.31.0
+    hostname: bacon-kafka-kafdrop-ui
+    container_name: bacon-kafka-kafdrop-ui
+    restart: "no"
+    ports:
+      - ${BACON_KAFKA_KAFDROP_UI_PORT}:9000
+    environment:
+      KAFKA_BROKERCONNECT: ${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
+      JVM_OPTS: "-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"
+    depends_on:
+      - "bacon-kafka-broker"
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+
+  bacon-kafka-connect-ui:
+    image: landoop/kafka-connect-ui
+    container_name: bacon-kafka-connect-ui
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-connect
+    ports:
+      - ${BACON_KAFKA_CONNECT_UI_PORT}:8000
+    environment:
+      CONNECT_URL: "http://bacon-kafka-connect:8083"
+      PROXY: "true"
+      TZ: ${TZ}
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+
+  bacon-kafka-schema-registry-ui:
+    image: landoop/schema-registry-ui:latest
+    hostname: bacon-kafka-schema-registry-ui
+    container_name: bacon-kafka-schema-registry-ui
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-broker
+      - bacon-kafka-schema-registry
+    ports:
+      - ${BACON_KAFKA_SCHEMA_REGISTRY_UI_PORT}:8000
+    environment:
+      SCHEMAREGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
+      PROXY: "true"
+      TZ: ${TZ}
+    volumes:
+      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
+      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
