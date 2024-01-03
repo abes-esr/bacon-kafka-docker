@@ -31,7 +31,7 @@ services:
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: ${BACON_KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS}
       KAFKA_REST_CONSUMER_REQUEST_TIMEOUT_MS: 30000
       TZ: ${TZ}
-      CLUSTER_ID: ${BACON_KAFKA_CLUSTER_ID}
+      CLUSTER_ID: h-fcO4AeThyXUPIguoTCkA
     volumes:
       - ./volumes/kafka-logdir-kraft:/tmp/kraft-combined-logs
       - /var/run/docker.sock:/var/run/docker.sock
