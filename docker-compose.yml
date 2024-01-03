@@ -33,7 +33,7 @@ services:
       TZ: ${TZ}
       CLUSTER_ID: ${BACON_KAFKA_CLUSTER_ID}
     volumes:
-      - ${BACON_KAFKA_WORKDIR}:/tmp/kraft-combined-logs
+      - ./volumes/kafka-logdir-kraft:/tmp/kraft-combined-logs
       - /var/run/docker.sock:/var/run/docker.sock
 
   bacon-kafka-connect:
