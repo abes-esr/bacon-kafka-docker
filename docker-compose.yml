@@ -68,7 +68,6 @@ services:
       #   docker cp kafka-connect:/usr/share/confluent-hub-components ./data/connect-jars
       TZ: ${TZ}
     volumes:
-      - ./kafka-connect:/etc/kafka-connect/jars
       - ./volumes/kafka-connect:/connectors
       - /applis/KatTest/bacon/:/applis/KatTest/bacon/
     # In the command section, $ are replaced with $$ to avoid the error 'Invalid interpolation format for "command" option'
