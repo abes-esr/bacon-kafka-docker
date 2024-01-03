@@ -35,8 +35,6 @@ services:
     volumes:
       - ${BACON_KAFKA_WORKDIR}:/tmp/kraft-combined-logs
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
 
   bacon-kafka-connect:
     image: confluentinc/cp-kafka-connect-base:7.5.0
@@ -73,8 +71,6 @@ services:
       - ./kafka-connect:/etc/kafka-connect/jars
       - ./volumes/kafka-connect:/connectors
       - /applis/KatTest/bacon/:/applis/KatTest/bacon/
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
     # In the command section, $ are replaced with $$ to avoid the error 'Invalid interpolation format for "command" option'
     command:
       - bash
@@ -125,9 +121,6 @@ services:
       KAFKA_REST_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
       KAFKA_REST_CONSUMER_REQUEST_TIMEOUT_MS: 30000
       TZ: ${TZ}
-    volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
 
   bacon-kafka-schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
@@ -147,8 +140,6 @@ services:
       SCHEMA_REGISTRY_ACCESS_CONTROL_ALLOW_METHODS: GET,POST,PUT,OPTIONS
       TZ: ${TZ}
     volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
       - ./volumes/kafka-schema-registry:/schemas
     command:
       - bash
@@ -202,9 +193,7 @@ services:
       CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
       CONFLUENT_METRICS_TOPIC_REPLICATION: 1
       PORT: 9021
-    volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
+      TZ: ${TZ}
 
   bacon-kafka-kafdrop-ui:
     image: obsidiandynamics/kafdrop:3.31.0
@@ -216,14 +205,12 @@ services:
     environment:
       KAFKA_BROKERCONNECT: ${BACON_KAFKA_INTERNAL_HOSTNAME}:29092
       JVM_OPTS: "-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"
+      TZ: ${TZ}
     depends_on:
       - "bacon-kafka-broker"
-    volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
 
   bacon-kafka-connect-ui:
-    image: landoop/kafka-connect-ui
+    image: landoop/kafka-connect-ui:0.9.7
     container_name: bacon-kafka-connect-ui
     restart: unless-stopped
     depends_on:
@@ -234,12 +221,9 @@ services:
       CONNECT_URL: "http://bacon-kafka-connect:8083"
       PROXY: "true"
       TZ: ${TZ}
-    volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
 
   bacon-kafka-schema-registry-ui:
-    image: landoop/schema-registry-ui:latest
+    image: landoop/schema-registry-ui:0.9.5
     hostname: bacon-kafka-schema-registry-ui
     container_name: bacon-kafka-schema-registry-ui
     restart: unless-stopped
@@ -252,6 +236,3 @@ services:
       SCHEMAREGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
       PROXY: "true"
       TZ: ${TZ}
-    volumes:
-      - ${DOCKER_HOST_LOCALTIME}:/etc/localtime
-      - ${DOCKER_HOST_TIMEZONE}:/etc/timezone
