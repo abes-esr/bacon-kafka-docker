@@ -232,6 +232,6 @@ services:
     ports:
       - ${BACON_KAFKA_SCHEMA_REGISTRY_UI_PORT}:8000
     environment:
-      SCHEMAREGISTRY_URL: http://bacon-kafka-schema-registry:${BACON_KAFKA_SCHEMA_REGISTRY_PORT}
+      SCHEMAREGISTRY_URL: http://bacon-kafka-schema-registry:8081
       PROXY: "true"
       TZ: ${TZ}
