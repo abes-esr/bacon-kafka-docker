@@ -8,9 +8,11 @@ En jaune, les différents composants de Kafka développés par Confluent :
 - Le control-center servant à visualiser l'état du cluster et toutes les métadonnées qui le relis : les brokers, nombre de topics présent sur le/les broker/s, les connecteurs, les schemas ...
 - kafka-rest-proxy qui est une API REST donnant la possibilité d'accéder au métadonnés du cluster ou mononoeud, ainsi que la posibilité d'intéragir avec celui-ci (création de topics ...)
 
-En vert, les interfaces utilisateurs développées par d'autres groupes.
+En vert, les interfaces utilisateurs développées par d'autres groupes :
 - schema-registry-ui donne un interface graphique permettant de gérer les schemas.
 - connecteur-ui correspondant à l'interface des connecteurs
+
+*1 *2 *3 - Un exemple de connecteur sink utilisé pour récupérer des données d'une table de la base Bacon et de les envoyer sur un topic kafka. (Configuration de celui-ci abordée ci-dessous)
 
 ## Kafka connect
 Il est possible de lire le contenu d'un topic en utilisant kafka Connect. Voici la marche à suivre :
