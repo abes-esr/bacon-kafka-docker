@@ -240,6 +240,9 @@ services:
     image: danielqsj/kafka-exporter:v1.7.0
     hostname: bacon-kafka-jmx-exporter
     container_name: bacon-kafka-jmx-exporter 
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-broker
     command: ["--kafka.server=bacon-kafka-broker:29092"]
     ports:
       - ${BACON_KAFKA_JMX_EXPORTER}:9308 
@@ -250,6 +253,9 @@ services:
     image: prom/prometheus:v2.52.0
     hostname: bacon-kafka-prometheus
     container_name: bacon-kafka-prometheus
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-jmx-exporter
     volumes:
       - ./volumes/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./volumes/monitoring/prometheus/storage:/prometheus
@@ -262,6 +268,9 @@ services:
     image: grafana/grafana:10.2.2
     hostname: bacon-kafka-grafana
     container_name: bacon-kafka-grafana
+    restart: unless-stopped
+    depends_on:
+      - bacon-kafka-prometheus
     volumes:
       - ./volumes/monitoring/grafana/data/:/var/lib/grafana
       - ./volumes/monitoring/grafana/config/grafana.ini:/etc/grafana/grafana.ini
