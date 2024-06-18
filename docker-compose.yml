@@ -19,7 +19,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_JMX_HOSTNAME: bacon-kafka-broker
       KAFKA_PROCESS_ROLES: "broker,controller"
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@${BACON_KAFKA_INTERNAL_HOSTNAME}:29093
       KAFKA_LISTENERS: PLAINTEXT://${BACON_KAFKA_INTERNAL_HOSTNAME}:29092,CONTROLLER://${BACON_KAFKA_INTERNAL_HOSTNAME}:29093,PLAINTEXT_HOST://0.0.0.0:9094
@@ -234,4 +234,42 @@ services:
     environment:
       SCHEMAREGISTRY_URL: http://bacon-kafka-schema-registry:8081
       PROXY: "true"
+      TZ: ${TZ}
+
+  bacon-kafka-jmx-exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    hostname: bacon-kafka-jmx-exporter
+    container_name: bacon-kafka-jmx-exporter 
+    command: ["--kafka.server=bacon-kafka-broker:29092"]
+    ports:
+      - ${BACON_KAFKA_JMX_EXPORTER}:9308 
+    environment:
+      TZ: ${TZ}
+
+  bacon-kafka-prometheus:
+    image: prom/prometheus:v2.52.0
+    hostname: bacon-kafka-prometheus
+    container_name: bacon-kafka-prometheus
+    volumes:
+      - ./volumes/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./volumes/monitoring/prometheus/storage:/prometheus
+    ports:
+      - ${BACON_KAFKA_PROMETHEUS}:9090
+    environment:
+      TZ: ${TZ}
+
+  bacon-kafka-grafana:
+    image: grafana/grafana:10.2.2
+    hostname: bacon-kafka-grafana
+    container_name: bacon-kafka-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${BACON_KAFKA_GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${BACON_KAFKA_GRAFANA_PASSWORD}
+    volumes:
+      - ./volumes/monitoring/grafana/data/:/var/lib/grafana
+      - ./volumes/monitoring/grafana/config/grafana.ini:/etc/grafana/grafana.ini
+      - ./volumes/monitoring/grafana/config/ldap.toml:/etc/grafana/ldap.toml
+    ports:
+      - ${BACON_KAFKA_GRAFANA}:3000
+    environment:
       TZ: ${TZ}
