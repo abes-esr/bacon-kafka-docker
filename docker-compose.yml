@@ -262,9 +262,6 @@ services:
     image: grafana/grafana:10.2.2
     hostname: bacon-kafka-grafana
     container_name: bacon-kafka-grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=${BACON_KAFKA_GRAFANA_USER}
-      - GF_SECURITY_ADMIN_PASSWORD=${BACON_KAFKA_GRAFANA_PASSWORD}
     volumes:
       - ./volumes/monitoring/grafana/data/:/var/lib/grafana
       - ./volumes/monitoring/grafana/config/grafana.ini:/etc/grafana/grafana.ini
@@ -272,4 +269,6 @@ services:
     ports:
       - ${BACON_KAFKA_GRAFANA}:3000
     environment:
+      GF_SECURITY_ADMIN_USER: ${BACON_KAFKA_GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${BACON_KAFKA_GRAFANA_PASSWORD}
       TZ: ${TZ}
